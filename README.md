@@ -1,5 +1,16 @@
 <h1 align="center">CustomWaypoints — WoW WotLK Navigator</h1>
-<img src="CustomWaypoints/samples/screenshots/cw_logo.png" width="800" alt="CustomWaypoints logo">
+
+<p align="center">
+  <a href="https://warperia.com/addon-wotlk/carbonite-customwaypoints-edition/">
+    <strong>⬇ Download CustomWaypoints on Warperia</strong>
+      <br>
+      <img src="CustomWaypoints/samples/screenshots/warperia.png" alt="Download on Warperia" height="40">
+  </a>
+</p>
+
+<p align="center">
+  <img src="CustomWaypoints/samples/screenshots/cw_logo.png" width="800" alt="CustomWaypoints logo">
+</p>
 
 This repository bundles a Wrath-era **Carbonite 3.3.5a** tree with **CustomWaypoints**, a companion addon that adds a modern waypoint workflow, and deep heuristic cross-continent routing.
 
