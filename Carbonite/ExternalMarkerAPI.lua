@@ -1,4 +1,5 @@
 local External = {
+    API_VERSION = 1,
     providers = {},
     activeFrames = {},
     installed = false,
@@ -33,19 +34,32 @@ local function InstallExternalTooltip(frame)
     end)
 end
 
+local function ClearFrame(frame)
+    if not frame then return end
+    frame:Hide()
+    frame.NXType = nil
+    frame.NXData = nil
+    frame.NxT = nil
+    frame.NxExternalTooltip = nil
+    frame.NxExternalProvider = nil
+end
+
 local function HideFrames(name)
     local frames = External.activeFrames[name]
     if not frames then return end
-    for _, frame in ipairs(frames) do
-        if frame then
-            frame:Hide()
-            frame.NXType = nil
-            frame.NXData = nil
-            frame.NxT = nil
-            frame.NxExternalTooltip = nil
-        end
-    end
+    for _, frame in ipairs(frames) do ClearFrame(frame) end
     External.activeFrames[name] = {}
+end
+
+local function SafeProviderCall(name, provider, method, ...)
+    local fn = provider and provider[method]
+    if type(fn) ~= "function" then return nil end
+    local ok, result = pcall(fn, provider, ...)
+    if not ok then
+        Print(name .. " " .. method .. " error: " .. tostring(result))
+        return nil
+    end
+    return result
 end
 
 local function DrawProvider(name, provider, map)
@@ -53,29 +67,28 @@ local function DrawProvider(name, provider, map)
     if not provider or provider.enabled == false or type(provider.GetMarkers) ~= "function" then return end
     if not map or type(map.GWP) ~= "function" or type(map.GIS) ~= "function" or type(map.CFW) ~= "function" then return end
 
-    local ok, markers = pcall(provider.GetMarkers, provider)
-    if not ok or type(markers) ~= "table" then
-        if not ok then Print(name .. " marker provider error: " .. tostring(markers)) end
-        return
-    end
+    local markers = SafeProviderCall(name, provider, "GetMarkers")
+    if type(markers) ~= "table" then return end
 
     local frames = {}
     External.activeFrames[name] = frames
     local baseSize = 16 * (map.INS or 1)
 
     for _, marker in ipairs(markers) do
-        if marker.carboniteMapId and marker.x and marker.y then
-            local wx, wy = map:GWP(marker.carboniteMapId, marker.x, marker.y)
-            local style = type(provider.GetStyle) == "function" and provider:GetStyle(marker) or nil
-            style = style or {}
-            local size = baseSize * (style.scale or 1)
+        local mapId = tonumber(marker.carboniteMapId or marker.carboniteMapID)
+        local x, y = tonumber(marker.x), tonumber(marker.y)
+        if mapId and x and y then
+            local wx, wy = map:GWP(mapId, x, y)
+            local style = SafeProviderCall(name, provider, "GetStyle", marker) or {}
+            local size = baseSize * (tonumber(style.scale) or 1)
             local frame = map:GIS(4)
             if frame and map:CFW(frame, wx, wy, size, size, 0) then
-                local tooltip = type(provider.GetTooltip) == "function" and provider:GetTooltip(marker) or marker.title
+                local tooltip = SafeProviderCall(name, provider, "GetTooltip", marker) or marker.title
                 frame.NXType = 9800
                 frame.NXData = marker
                 frame.NxT = tooltip
                 frame.NxExternalTooltip = tooltip
+                frame.NxExternalProvider = name
                 InstallExternalTooltip(frame)
                 frame.tex:SetTexture(style.texture or "Interface\\AddOns\\Carbonite\\Gfx\\Map\\IconExclaim")
                 frame.tex:SetVertexColor(style.r or 1, style.g or .82, style.b or 0, 1)
@@ -85,9 +98,14 @@ local function DrawProvider(name, provider, map)
     end
 end
 
+function External:GetAPIVersion()
+    return self.API_VERSION
+end
+
 function External:RegisterExternalMarkerProvider(name, provider)
     assert(type(name) == "string" and name ~= "", "provider name required")
     assert(type(provider) == "table", "provider table required")
+    assert(type(provider.GetMarkers) == "function", "provider.GetMarkers required")
     self.providers[name] = provider
     self.activeFrames[name] = self.activeFrames[name] or {}
     return true
@@ -96,6 +114,10 @@ end
 function External:UnregisterExternalMarkerProvider(name)
     HideFrames(name)
     self.providers[name] = nil
+end
+
+function External:GetExternalMarkerProvider(name)
+    return self.providers[name]
 end
 
 function External:RefreshExternalMarkers(name)
@@ -117,6 +139,37 @@ end
 
 function External:IsNativeAvailableQuestGiversEnabled()
     return self.nativeAvailableQuestGivers
+end
+
+function External:SetExternalTarget(providerName, marker)
+    local map = self.lastMap
+    local mapId = marker and tonumber(marker.carboniteMapId or marker.carboniteMapID)
+    local x, y = marker and tonumber(marker.x), marker and tonumber(marker.y)
+    if not map or not mapId or not x or not y
+        or type(map.GWP) ~= "function" or type(map.SeT3) ~= "function" or type(map.GoP) ~= "function"
+    then
+        return false
+    end
+
+    local wx, wy = map:GWP(mapId, x, y)
+    local markerId = tostring(marker.id or marker.questId or "target")
+    local title = tostring(marker.title or marker.giverName or markerId)
+    map:SeT3("Guide", wx, wy, wx, wy, false, tostring(providerName) .. ":" .. markerId, title, false, mapId)
+    map:GoP()
+    return true
+end
+
+function External:DispatchExternalMarkerAction(providerName, action, marker)
+    local provider = self.providers[providerName]
+    if not provider then return false end
+    if type(provider.OnAction) == "function" then
+        local result = SafeProviderCall(providerName, provider, "OnAction", action, marker, self)
+        if result ~= nil then return result and true or false end
+    end
+    if action == "TRACK" or action == "GOTO" then
+        return self:SetExternalTarget(providerName, marker)
+    end
+    return false
 end
 
 local function InstallMapRenderer()
@@ -159,7 +212,7 @@ local function InstallMapRenderer()
     end
 
     External.installed = true
-    Print("external marker API installed")
+    Print("external marker API v" .. External.API_VERSION .. " installed")
     return true
 end
 
