@@ -49,7 +49,9 @@ local function DrawProvider(name, provider, map)
             local size = baseSize * (style.scale or 1)
             local frame = map:GIS(4)
             if frame and map:CFW(frame, wx, wy, size, size, 0) then
-                frame.NXType = 9900
+                -- Reuse Carbonite's proven quest-marker hover path. The generic
+                -- 9900 type opened a tooltip shell but did not render NxT text.
+                frame.NXType = 9800
                 frame.NXData = marker
                 frame.NxT = type(provider.GetTooltip) == "function" and provider:GetTooltip(marker) or marker.title
                 frame.tex:SetTexture(style.texture or "Interface\\AddOns\\Carbonite\\Gfx\\Map\\IconExclaim")
