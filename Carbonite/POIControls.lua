@@ -1,9 +1,8 @@
 local Test = {
-    VERSION = 2,
+    VERSION = 3,
     hideFlightMasters = false,
     installed = false,
     originalUMI1 = nil,
-    printedMatches = {},
 }
 
 local function Print(message)
@@ -14,58 +13,13 @@ local function Lower(value)
     return string.lower(tostring(value or ""))
 end
 
-local function Describe(shT, fol)
-    if type(fol) ~= "table" then
-        return "key=" .. tostring(shT) .. " value=" .. tostring(fol)
-    end
-
-    return string.format(
-        "key=%s Nam=%s Name=%s N=%s Tx=%s Id=%s Per=%s",
-        tostring(shT),
-        tostring(fol.Nam),
-        tostring(fol.Name),
-        tostring(fol.N),
-        tostring(fol.Tx),
-        tostring(fol.Id),
-        tostring(fol.Per)
-    )
-end
-
-local function IsFlightMasterEntry(shT, fol)
-    local values = {
-        shT,
-        type(fol) == "table" and fol.Nam,
-        type(fol) == "table" and fol.Name,
-        type(fol) == "table" and fol.N,
-        type(fol) == "table" and fol.Tx,
-        type(fol) == "table" and fol.InT2,
-    }
-
-    for _, value in ipairs(values) do
-        local text = Lower(value)
-        if string.find(text, "flight", 1, true)
-            or string.find(text, "taxi", 1, true)
-            or string.find(text, "gryphon", 1, true)
-            or string.find(text, "wyvern", 1, true)
-        then
-            return true
-        end
-    end
-
-    return false
+local function IsFlightMasterPOI(value)
+    local name = strsplit("~", tostring(value or ""))
+    return Lower(name) == "flight master"
 end
 
 local function RefreshMaps()
     if not Nx or not Nx.Map then return end
-
-    if type(Nx.Map.GetMap) == "function" then
-        pcall(function()
-            local map = Nx.Map:GetMap(1)
-            if map and map.Gui and type(map.Gui.Upd) == "function" then
-                map.Gui:Upd()
-            end
-        end)
-    end
 
     if type(Nx.Map.GeM) == "function" then
         pcall(function()
@@ -77,22 +31,42 @@ local function RefreshMaps()
     end
 end
 
-local function DumpVisibleFolders(gui)
-    if not gui or type(gui.ShF) ~= "table" then
-        Print("No active Guide folder table was found. Open or move the Carbonite map, then retry.")
+local function DumpBuiltInPOIs()
+    if not Nx or type(Nx.GPOI) ~= "table" then
+        Print("Nx.GPOI was not found")
         return
     end
 
-    local count = 0
-    local matches = 0
-    Print("active Guide entries:")
-    for shT, fol in pairs(gui.ShF) do
-        count = count + 1
-        local match = IsFlightMasterEntry(shT, fol)
-        if match then matches = matches + 1 end
-        Print((match and "MATCH " or "      ") .. Describe(shT, fol))
+    Print("built-in Nx.GPOI entries:")
+    for index, value in ipairs(Nx.GPOI) do
+        Print(string.format("%d: %s%s", index, tostring(value), IsFlightMasterPOI(value) and "  <MATCH>" or ""))
     end
-    Print(string.format("dump complete: %d entries, %d flight-master candidates", count, matches))
+end
+
+local function RemoveFlightMasterPOIs()
+    local removed = {}
+
+    if not Nx or type(Nx.GPOI) ~= "table" then
+        return removed
+    end
+
+    for index = #Nx.GPOI, 1, -1 do
+        local value = Nx.GPOI[index]
+        if IsFlightMasterPOI(value) then
+            table.insert(removed, 1, { index = index, value = value })
+            table.remove(Nx.GPOI, index)
+        end
+    end
+
+    return removed
+end
+
+local function RestorePOIs(removed)
+    if not Nx or type(Nx.GPOI) ~= "table" then return end
+
+    for _, entry in ipairs(removed) do
+        table.insert(Nx.GPOI, entry.index, entry.value)
+    end
 end
 
 local function Install()
@@ -105,32 +79,19 @@ local function Install()
     Nx.Map.Gui.UMI1 = function(self, ...)
         local removed = {}
 
-        if type(self.ShF) == "table" then
-            for shT, fol in pairs(self.ShF) do
-                if IsFlightMasterEntry(shT, fol) then
-                    if not Test.printedMatches[shT] then
-                        Test.printedMatches[shT] = true
-                        Print("identified candidate: " .. Describe(shT, fol))
-                    end
-                    if Test.hideFlightMasters then
-                        removed[shT] = fol
-                        self.ShF[shT] = nil
-                    end
-                end
-            end
+        if Test.hideFlightMasters then
+            removed = RemoveFlightMasterPOIs()
         end
 
         local results = { pcall(Test.originalUMI1, self, ...) }
-
-        for shT, fol in pairs(removed) do
-            self.ShF[shT] = fol
-        end
+        RestorePOIs(removed)
 
         local ok = table.remove(results, 1)
         if not ok then
             Print("renderer error: " .. tostring(results[1]))
             return
         end
+
         return unpack(results)
     end
 
@@ -144,14 +105,14 @@ SlashCmdList.CARBONITEPOITEST = function(message)
     local command = Lower(message):match("^%s*(.-)%s*$")
 
     if command == "dump" then
-        DumpVisibleFolders(Nx and Nx.Map and Nx.Map.Gui)
+        DumpBuiltInPOIs()
     elseif command == "hide" then
         Test.hideFlightMasters = true
-        Print("Flight Master candidate filtering ON")
+        Print("built-in Flight Master filtering ON")
         RefreshMaps()
     elseif command == "show" then
         Test.hideFlightMasters = false
-        Print("Flight Master candidate filtering OFF")
+        Print("built-in Flight Master filtering OFF")
         RefreshMaps()
     elseif command == "status" then
         Print("filter is " .. (Test.hideFlightMasters and "ON" or "OFF"))
