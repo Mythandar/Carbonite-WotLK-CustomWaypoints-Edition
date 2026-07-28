@@ -5,6 +5,7 @@ local External = {
     originalUpI = nil,
     originalUMI1 = nil,
     nativeAvailableQuestGivers = true,
+    lastMap = nil,
 }
 
 local function Print(message)
@@ -27,12 +28,8 @@ end
 
 local function DrawProvider(name, provider, map)
     HideFrames(name)
-    if not provider or provider.enabled == false or type(provider.GetMarkers) ~= "function" then
-        return
-    end
-    if not map or type(map.GWP) ~= "function" or type(map.GIS) ~= "function" or type(map.CFW) ~= "function" then
-        return
-    end
+    if not provider or provider.enabled == false or type(provider.GetMarkers) ~= "function" then return end
+    if not map or type(map.GWP) ~= "function" or type(map.GIS) ~= "function" or type(map.CFW) ~= "function" then return end
 
     local ok, markers = pcall(provider.GetMarkers, provider)
     if not ok or type(markers) ~= "table" then
@@ -77,17 +74,16 @@ function External:UnregisterExternalMarkerProvider(name)
 end
 
 function External:RefreshExternalMarkers(name)
+    local map = self.lastMap
+    if not map then return false end
     if name then
-        local map = Nx and Nx.Map and Nx.Map[1]
-        if map then DrawProvider(name, self.providers[name], map) end
-        return
-    end
-    local map = Nx and Nx.Map and Nx.Map[1]
-    if map then
+        DrawProvider(name, self.providers[name], map)
+    else
         for providerName, provider in pairs(self.providers) do
             DrawProvider(providerName, provider, map)
         end
     end
+    return true
 end
 
 function External:SetNativeAvailableQuestGiversEnabled(enabled)
@@ -105,15 +101,12 @@ local function InstallMapRenderer()
 
     External.originalUpI = Nx.Que.UpI
     Nx.Que.UpI = function(self, map, ...)
+        External.lastMap = map
         local results = { External.originalUpI(self, map, ...) }
-        for name, provider in pairs(External.providers) do
-            DrawProvider(name, provider, map)
-        end
+        for name, provider in pairs(External.providers) do DrawProvider(name, provider, map) end
         return unpack(results)
     end
 
-    -- Carbonite owns native available-quest visibility here. The bridge only
-    -- requests the setting through the public API.
     if Nx.Map and Nx.Map.Gui and type(Nx.Map.Gui.UMI1) == "function" then
         External.originalUMI1 = Nx.Map.Gui.UMI1
         Nx.Map.Gui.UMI1 = function(self, ...)
