@@ -1,8 +1,8 @@
 local Test = {
-    VERSION = 3,
+    VERSION = 4,
     hideFlightMasters = false,
     installed = false,
-    originalUMI1 = nil,
+    originalUZPOII = nil,
 }
 
 local function Print(message)
@@ -16,31 +16,6 @@ end
 local function IsFlightMasterPOI(value)
     local name = strsplit("~", tostring(value or ""))
     return Lower(name) == "flight master"
-end
-
-local function RefreshMaps()
-    if not Nx or not Nx.Map then return end
-
-    if type(Nx.Map.GeM) == "function" then
-        pcall(function()
-            local map = Nx.Map:GeM(1)
-            if map and map.Gui and type(map.Gui.Upd) == "function" then
-                map.Gui:Upd()
-            end
-        end)
-    end
-end
-
-local function DumpBuiltInPOIs()
-    if not Nx or type(Nx.GPOI) ~= "table" then
-        Print("Nx.GPOI was not found")
-        return
-    end
-
-    Print("built-in Nx.GPOI entries:")
-    for index, value in ipairs(Nx.GPOI) do
-        Print(string.format("%d: %s%s", index, tostring(value), IsFlightMasterPOI(value) and "  <MATCH>" or ""))
-    end
 end
 
 local function RemoveFlightMasterPOIs()
@@ -69,21 +44,64 @@ local function RestorePOIs(removed)
     end
 end
 
+local function DumpBuiltInPOIs()
+    if not Nx or type(Nx.GPOI) ~= "table" then
+        Print("Nx.GPOI was not found")
+        return
+    end
+
+    Print("built-in Nx.GPOI entries:")
+    for index, value in ipairs(Nx.GPOI) do
+        Print(string.format("%d: %s%s", index, tostring(value), IsFlightMasterPOI(value) and "  <MATCH>" or ""))
+    end
+end
+
+local function GetMainMapGui()
+    if not Nx or not Nx.Map then return nil end
+
+    if type(Nx.Map.GeM) == "function" then
+        local ok, map = pcall(Nx.Map.GeM, Nx.Map, 1)
+        if ok and map and map.Gui then
+            return map.Gui
+        end
+    end
+
+    return Nx.Map.Gui
+end
+
+local function RebuildBuiltInPOIs()
+    local gui = GetMainMapGui()
+    if not gui or type(gui.UZPOII) ~= "function" then
+        Print("active map POI renderer was not found")
+        return
+    end
+
+    -- UZPOII caches the current map and draw state. Clear both values so the
+    -- built-in POI icon layer is actually rebuilt instead of returning early.
+    gui.POIMI = nil
+    gui.POID = nil
+
+    local ok, err = pcall(gui.UZPOII, gui)
+    if not ok then
+        Print("POI rebuild error: " .. tostring(err))
+    end
+end
+
 local function Install()
     if Test.installed then return true end
-    if not Nx or not Nx.Map or not Nx.Map.Gui or type(Nx.Map.Gui.UMI1) ~= "function" then
+    if not Nx or not Nx.Map or not Nx.Map.Gui or type(Nx.Map.Gui.UZPOII) ~= "function" then
         return false
     end
 
-    Test.originalUMI1 = Nx.Map.Gui.UMI1
-    Nx.Map.Gui.UMI1 = function(self, ...)
+    Test.originalUZPOII = Nx.Map.Gui.UZPOII
+    Nx.Map.Gui.UZPOII = function(self, ...)
         local removed = {}
 
         if Test.hideFlightMasters then
             removed = RemoveFlightMasterPOIs()
         end
 
-        local results = { pcall(Test.originalUMI1, self, ...) }
+        local results = { pcall(Test.originalUZPOII, self, ...) }
         RestorePOIs(removed)
 
         local ok = table.remove(results, 1)
@@ -109,11 +127,11 @@ SlashCmdList.CARBONITEPOITEST = function(message)
     elseif command == "hide" then
         Test.hideFlightMasters = true
         Print("built-in Flight Master filtering ON")
-        RefreshMaps()
+        RebuildBuiltInPOIs()
     elseif command == "show" then
         Test.hideFlightMasters = false
         Print("built-in Flight Master filtering OFF")
-        RefreshMaps()
+        RebuildBuiltInPOIs()
     elseif command == "status" then
         Print("filter is " .. (Test.hideFlightMasters and "ON" or "OFF"))
     else
