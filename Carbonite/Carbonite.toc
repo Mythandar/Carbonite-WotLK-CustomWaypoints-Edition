@@ -13,4 +13,5 @@ Carbonite.lua
 ExternalMarkerAPI.lua
 POIControls.lua
 POICheckFix.lua
+POICompactGUI.lua
 Carbonite.xml
