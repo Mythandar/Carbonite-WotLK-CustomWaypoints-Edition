@@ -11,4 +11,5 @@
 Localization.lua
 Carbonite.lua
 ExternalMarkerAPI.lua
+POIControls.lua
 Carbonite.xml
