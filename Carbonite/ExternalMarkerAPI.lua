@@ -12,6 +12,27 @@ local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff40c0ffCarbonite API|r: " .. tostring(message))
 end
 
+local function InstallExternalTooltip(frame)
+    if frame.NxExternalTooltipInstalled then return end
+    frame.NxExternalTooltipInstalled = true
+
+    frame:HookScript("OnEnter", function(self)
+        local tip = self.NxExternalTooltip
+        if not tip or tip == "" then return end
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT", 0, 5)
+        if Nx and type(Nx.STT) == "function" then
+            Nx:STT(tip)
+        else
+            GameTooltip:SetText(tip, 1, 1, 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+
+    frame:HookScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+end
+
 local function HideFrames(name)
     local frames = External.activeFrames[name]
     if not frames then return end
@@ -21,6 +42,7 @@ local function HideFrames(name)
             frame.NXType = nil
             frame.NXData = nil
             frame.NxT = nil
+            frame.NxExternalTooltip = nil
         end
     end
     External.activeFrames[name] = {}
@@ -49,11 +71,12 @@ local function DrawProvider(name, provider, map)
             local size = baseSize * (style.scale or 1)
             local frame = map:GIS(4)
             if frame and map:CFW(frame, wx, wy, size, size, 0) then
-                -- Reuse Carbonite's proven quest-marker hover path. The generic
-                -- 9900 type opened a tooltip shell but did not render NxT text.
+                local tooltip = type(provider.GetTooltip) == "function" and provider:GetTooltip(marker) or marker.title
                 frame.NXType = 9800
                 frame.NXData = marker
-                frame.NxT = type(provider.GetTooltip) == "function" and provider:GetTooltip(marker) or marker.title
+                frame.NxT = tooltip
+                frame.NxExternalTooltip = tooltip
+                InstallExternalTooltip(frame)
                 frame.tex:SetTexture(style.texture or "Interface\\AddOns\\Carbonite\\Gfx\\Map\\IconExclaim")
                 frame.tex:SetVertexColor(style.r or 1, style.g or .82, style.b or 0, 1)
                 frames[#frames + 1] = frame
