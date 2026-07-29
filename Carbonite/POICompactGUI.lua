@@ -33,18 +33,20 @@ local function InstallCompactPOIGUI()
     local function BuiltInProvider()
         local categories = {}
         for _, category in ipairs(POI:GetCategories() or {}) do
+            local categoryName = category.name
+            local categoryKey = category.key or Normalize(categoryName)
             categories[#categories + 1] = {
-                id = category.key or Normalize(category.name),
-                name = category.name,
-                IsEnabled = function() return POI:IsEnabled(category.name) end,
-                SetEnabled = function(enabled) return POI:SetEnabled(category.name, enabled) end,
+                id = categoryKey,
+                name = categoryName,
+                IsEnabled = function() return POI:IsEnabled(categoryName) end,
+                SetEnabled = function(_, enabled) return POI:SetEnabled(categoryName, enabled) end,
             }
         end
         return {
             id = "carbonite",
             name = "Carbonite built-in POIs",
             categories = categories,
-            SetAll = function(enabled) POI:SetAll(enabled) end,
+            SetAll = function(_, enabled) POI:SetAll(enabled) end,
         }
     end
 
